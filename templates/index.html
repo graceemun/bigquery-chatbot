@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Assistant</title>
+
+  <!-- Fonts: system UI for prose, Fira Code for code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet"/>
+
+  <!-- Libs -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    :root {
+      --page-bg: #ffffff;
+      --panel-bg: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --code-bg: #f7f7f8;
+      --accent: #667eea;
+      --scrollbar: #c7cbd1;
+    }
+
+    html, body { height:100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: var(--text);
+      background: var(--page-bg);
+      height: 100vh;
+      overflow: hidden;
+      scrollbar-gutter: stable both-edges;
+    }
+
+    .app-container {
+      display:flex; height:100vh; width:100vw; overflow:hidden; position:relative;
+    }
+
+    /* ===== Top bar (hamburger) - always on top-left */
+    .topbar {
+      position: fixed; 
+      top: 12px; 
+      left: 12px;
+      z-index: 1101;
+      display: inline-flex; 
+      align-items: center; 
+      gap: 10px;
+      background: transparent;
+      pointer-events: auto;
+      overflow: visible;
+    }
+
+    .topbar-floating {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 1100;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      transition: transform .25s ease;
+    }
+
+    body.sidebar-open .topbar-floating {
+      transform: translateX(280px);
+    }
+
+    .sidebar-toggle-btn {
+      position: fixed; top:16px; left:16px;
+      width:40px; height:40px;
+      background: transparent; border: 0; cursor: pointer;
+      z-index: 1300;
+      overflow: visible;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: background-color 0.15s ease;
+    }
+
+    .sidebar-toggle-btn:hover { 
+      transform: translateY(-1px); 
+      box-shadow: 0 10px 26px rgba(0,0,0,.16); 
+    }
+
+    .hamburger { 
+      position: relative;
+      width: 18px;
+      height: 14px;
+    }
+
+    .hamburger span { 
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: #111;
+      border-radius: 2px;
+      transition: transform .2s ease, opacity .2s ease, top .2s ease;
+    }
+
+    .hamburger span:nth-child(1){ top: 0;  }
+    .hamburger span:nth-child(2){ top: 6px; }
+    .hamburger span:nth-child(3){ top: 12px;}
+    
+    body.sidebar-open .hamburger span:nth-child(1){ 
+      top: 6px; transform: rotate(45deg); 
+    }
+
+    body.sidebar-open .hamburger span:nth-child(2){ 
+      opacity: 0; 
+    }
+    body.sidebar-open .hamburger span:nth-child(3){ 
+      top: 6px; bottom:auto; transform: rotate(-45deg);
+    }
+
+    body.sidebar-open .hamburger span { background: #fff; }
+   
+    .chat-title {
+      font-size: 15px; 
+      font-weight: 600; 
+      color:#111827;
+      user-select: none; 
+      padding: 8px 10px;
+      background: white; 
+    }
+
+    body.sidebar-closed .chat-title {
+      margin-left: 45px;
+    }
+
+    /* ===== Sidebar ===== */
+    .sidebar {
+      position: fixed; top:0; left:0; height:100vh; width:280px;
+      background:#1a1a1a; color:#fff; display:flex; flex-direction:column;
+      border-right:1px solid #2a2a2a;
+      transform: translateX(-100%);
+      transition: transform .25s ease;
+      z-index: 1000;
+      padding-top: 64px;
+    }
+    
+    body.sidebar-open .sidebar { 
+      transform: translateX(0); 
+    }
+
+    .sidebar-header { 
+      padding:16px; 
+      border-bottom:1px solid #333; 
+      position: sticky;
+      background: #1a1a1a;
+      z-index: 10;
+    }
+
+    .new-chat-btn {
+      width:100%; background:#fff; color:#111; border:1px solid rgba(0,0,0,.2);
+      padding:10px 12px; border-radius:10px; font-size:14px; font-weight:600; cursor:pointer;
+      display:flex; align-items:center; gap:8px; transition:transform .12s ease, box-shadow .12s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .new-chat-btn:hover { 
+      transform:translateY(-1px); 
+      box-shadow:0 8px 18px rgba(0,0,0,.18); 
+    }
+    
+    .new-chat-btn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+      transition: left 0.4s ease;
+    }
+
+    .new-chat-btn:hover::before {
+      left: 100%;
+    }
+    
+    .new-chat-btn svg { width:16px; height:16px; }
+
+    .conversations-list { 
+      flex:1; 
+      overflow-y:auto; 
+      padding:8px; 
+    }
+    
+    .conversations-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .conversations-list::-webkit-scrollbar-thumb {
+      background: #444;
+      border-radius: 2px;
+    }
+
+    .conversations-list::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    
+    .conversation-item {
+      position: relative;
+      width: 100%; 
+      background: transparent; 
+      border: none; 
+      color: #e5e5e5;
+      padding: 12px 16px; 
+      margin: 3px 0; 
+      border-radius: 8px; 
+      cursor: pointer;
+      display: flex; 
+      align-items: center; 
+      gap: 8px; 
+      text-align: left;
+      transition: all .15s ease;
+      border-left: 3px solid transparent;
+      overflow: hidden;
+      animation: slideInLeft 0.3s ease-out;
+    }
+
+    .conversation-item:hover { 
+      background: #2a2a2a;
+      transform: translateX(2px);
+    }
+
+    .conversation-item:hover .conversation-actions {
+      opacity: 1;
+    }
+
+    .conversation-item.active { 
+      background: #333; 
+      color: #fff;
+      border-left-color: #667eea;
+      box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    }
+
+    .conversation-item.active::after {
+      content: '';
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 6px;
+      height: 6px;
+      background: #667eea;
+      border-radius: 50%;
+      opacity: 0.8;
+    }
+
+    .conversation-item.active .conversation-actions {
+      opacity: 0.7;
+    }
+
+    .conversation-item.active:hover .conversation-actions {
+      opacity: 1;
+    }
+
+    .conversation-item::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .conversation-item:hover::before {
+      left: 100%;
+    }
+
+    .conversation-title { 
+      flex: 1; 
+      white-space: nowrap; 
+      overflow: hidden; 
+      text-overflow: ellipsis; 
+      font-size: 14px;
+      line-height: 1.4;
+      font-weight: 500;
+      min-width: 0;
+    }
+
+    .conversation-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity .15s ease;
+      margin-left: auto;
+    }
+
+    .rename-conversation-btn,
+    .delete-conversation-btn {
+      background: transparent;
+      border: none;
+      color: #999;
+      padding: 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .15s ease;
+      min-width: 24px;
+      min-height: 24px;
+    }
+
+    .rename-conversation-btn:hover {
+      background: #4f46e5;
+      color: #fff;
+      transform: scale(1.1);
+    }
+
+    .delete-conversation-btn:hover {
+      background: #dc3545;
+      color: #fff;
+      transform: scale(1.1);
+    }
+
+    .rename-input {
+      width: 100%;
+      background: #2a2a2a;
+      border: 1px solid #667eea;
+      border-radius: 4px;
+      padding: 4px 8px;
+      color: #fff;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .rename-input:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+    }
+
+    .conversations-empty {
+      text-align: center;
+      color: #888;
+      font-size: 13px;
+      padding: 24px 16px;
+      font-style: italic;
+      line-height: 1.5;
+    }
+
+    .conversations-loading {
+      text-align: center;
+      color: #888;
+      font-size: 13px;
+      padding: 20px 16px;
+    }
+
+    .sidebar-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.35);
+      opacity:0; pointer-events:none; transition:opacity .2s ease; z-index:900;
+    }
+    body.sidebar-open .sidebar-overlay { opacity:1; pointer-events:auto; }
+
+    /* ===== Main chat ===== */
+    .chat-container { flex:1 1 auto; display:flex; flex-direction:column; width:100%; height:100%; }
+    .chat-wrapper { max-width:900px; width:100%; margin:0 auto; display:flex; flex-direction:column; height:100%; }
+
+    .chat-messages {
+      flex:1 1 auto; overflow-y:auto; background: transparent;
+      padding: 28px 28px 10px 28px;
+    }
+
+    .chat-messages::-webkit-scrollbar { width: 6px; }
+    .chat-messages::-webkit-scrollbar-thumb { background: var(--scrollbar); border-radius: 4px; }
+    .chat-messages { scrollbar-width: thin; }
+
+    .message { margin: 0 auto 18px auto; display:flex; gap:12px; }
+    .message .message-content { max-width: 100%; }
+
+    .message.user { justify-content: flex-end; }
+    .message.user .message-content {
+      background: #f7f7f8; 
+      border-radius: 14px; 
+      padding: 12px 14px; 
+      max-width: 70%;
+      font-size: 15.5px; 
+      line-height: 1.55; 
+      color: #111;
+      word-wrap: break-word; 
+      overflow-wrap: anywhere; 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .message.assistant.normal .message-content {
+      background: transparent; padding: 0; border-radius: 0; max-width: 100%;
+      font-size: 16.5px; line-height: 1.7; color: #222;
+      word-wrap: break-word; overflow-wrap: anywhere;
+    }
+    
+    .message.assistant.normal .message-content p { margin: 0 0 12px 0; }
+    .message.assistant.normal .message-content h1,
+    .message.assistant.normal .message-content h2,
+    .message.assistant.normal .message-content h3 { margin: 16px 0 8px; }
+    .message.assistant.normal .message-content ul,
+    .message.assistant.normal .message-content ol { margin: 10px 0 12px 20px; }
+    .message.assistant.normal .message-content blockquote {
+      border-left: 4px solid #e5e7eb; padding-left: 12px; color: #374151; margin: 10px 0 12px;
+    }
+    .message.assistant.normal .message-content code {
+      font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      background: var(--code-bg); padding: 2px 5px; border-radius: 4px;
+      font-size: 90%;
+    }
+    .message-time { font-size:12px; color: var(--muted); margin-top: 6px; }
+
+    .message.assistant.query .message-content {
+      background: var(--code-bg); 
+      padding: 12px; border-radius: 8px; max-width: 100%;
+      font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 15px; line-height: 1.55;
+      overflow-x: auto;
+      word-wrap: break-word; overflow-wrap: anywhere;
+    }
+    .message.assistant.query pre, .message.assistant.query code {
+      font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace !important;
+      font-size: 14.5px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message.assistant.table .message-content { background: transparent; padding: 0; }
+    .message.assistant.table table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.5; }
+    .message.assistant.table th, .message.assistant.table td {
+      border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left;
+    }
+    .message.assistant.table th { background: #fafafa; }
+
+    .message.assistant h1,
+    .message.assistant h2, 
+    .message.assistant h3 {
+        margin-top: 15px;
+        margin-bottom: 10px;
+        font-weight: bold;
+    }
+
+    .message.assistant h2 {
+        font-size: 1.3em;
+        border-bottom: 2px solid #e1e5e9;
+        padding-bottom: 5px;
+    }
+
+    .message.assistant h3 {
+        font-size: 1.1em;
+        color: #586069;
+    }
+
+    .message.assistant {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .typing-indicator { display:none; align-items:center; gap:12px; margin: 0 28px 16px; }
+    .typing-indicator.show { display:flex; }
+    .typing-dots { display:flex; gap:4px; padding:10px 12px; background:#f8f9fa; border:1px solid #e1e8ed; border-radius:12px; }
+    .typing-dot { width:8px; height:8px; border-radius:50%; background:#8e9bae; animation:typing 1.4s infinite ease-in-out; }
+    .typing-dot:nth-child(1){ animation-delay:-0.32s; }
+    .typing-dot:nth-child(2){ animation-delay:-0.16s; }
+    @keyframes typing { 0%,80%,100%{transform:scale(.8);opacity:.5;} 40%{transform:scale(1);opacity:1;} }
+
+    .chat-input-container { padding:14px 28px 18px; border-top:1px solid var(--border); background: var(--panel-bg); }
+    .chat-input-wrapper {
+      display:flex; gap:10px; align-items:center; background:#f6f7fb; border:1px solid #e1e8ed;
+      border-radius:16px; padding:8px 12px; transition:border-color .15s ease, background .15s ease;
+    }
+    .chat-input-wrapper:focus-within { border-color: var(--accent); background:#fff; }
+    .chat-input {
+      flex:1; border:none; outline:none; background:transparent; resize:none;
+      font: inherit; font-size:16px; line-height:1.5; max-height:160px; min-height:20px;
+    }
+    .send-button {
+      width:36px; height:36px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; border:none; cursor:pointer;
+      transition:transform .12s ease, box-shadow .12s ease;
+    }
+    .send-button:hover { transform:translateY(-1px); box-shadow:0 8px 18px rgba(102,126,234,.35); }
+    .send-button:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+
+    .welcome-message {
+      text-align: center; color: #444;
+      margin-top: 18vh; max-width: 560px; margin-left:auto; margin-right:auto;
+      padding: 0 16px;
+    }
+    .welcome-message h2 { font-size: 28px; font-weight: 700; margin-bottom: 10px; letter-spacing: -0.01em; }
+    .welcome-message p { font-size: 17px; line-height: 1.5; color: #666; }
+
+    .error-panel {
+      border: 1px solid #e1e8ed; background: #fff; border-radius: 10px;
+      padding: 10px 12px; max-width: 100%;
+      overflow-wrap: break-word; word-break: break-word;
+    }
+    .error-title { font-size: 12px; font-weight: 600; color: #b00020; margin-bottom: 6px; }
+    .error-text { font-size: 12px; line-height: 1.45; white-space: pre-wrap; }
+
+    .global-user-avatar {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      z-index: 1201;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .global-user-avatar .bubble {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 600;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      box-shadow: 0 10px 26px rgba(0,0,0,.18);
+    }
+
+    .user-popover {
+      display: none;
+      position: fixed;
+      left: 16px;
+      bottom: 64px;
+      background: #fff;
+      border: 1px solid #e1e8ed;
+      border-radius: 10px;
+      box-shadow: 0 16px 40px rgba(0,0,0,.18);
+      padding: 8px;
+      min-width: 180px;
+      z-index: 1201;
+    }
+    .user-popover.open { display: block; }
+
+    .menu-item {
+      width: 100%;
+      background: transparent;
+      border: none;
+      text-align: left;
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 14px;
+    }
+    .menu-item:hover { background: #f5f7fb; }
+
+    .new-chat-message {
+      text-align: center; 
+      color: #444;
+      margin-top: 18vh; 
+      max-width: 560px; 
+      margin-left: auto; 
+      margin-right: auto;
+      padding: 0 16px;
+      animation: fadeInUp 0.4s ease-out;
+    }
+
+    .new-chat-message h2 { 
+      font-size: 28px; 
+      font-weight: 700; 
+      margin-bottom: 10px; 
+      letter-spacing: -0.01em; 
+    }
+
+    .new-chat-message p { 
+      font-size: 17px; 
+      line-height: 1.5; 
+      color: #666; 
+    }
+
+    @keyframes slideInLeft {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+      .conversation-title {
+        font-size: 13px;
+      }
+      
+      .conversation-actions {
+        opacity: 1;
+      }
+      
+      .rename-conversation-btn,
+      .delete-conversation-btn {
+        min-width: 22px;
+        min-height: 22px;
+      }
+      
+      .conversation-item {
+        padding: 10px 12px;
+      }
+    }
+
+  </style>
+</head>
+<body class="sidebar-closed">
+
+  <div class="topbar-floating">
+    <div class="chat-title">Nuview Bigquery Chatbot</div>
+  </div>
+
+   <!-- Top-left controls -->
+  <div class="topbar">
+    <button class="sidebar-toggle-btn" id="sidebarToggle" aria-label="Toggle sidebar">
+      <div class="hamburger">
+        <span></span><span></span><span></span>
+      </div>
+    </button>
+  </div>
+
+  <div class="app-container">
+
+    <!-- Sidebar + overlay -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <button class="new-chat-btn" id="newChatBtn">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+          New Chat
+        </button>
+      </div>
+
+      <!-- FIXED: Empty conversations list - will be populated by JavaScript -->
+      <div class="conversations-list" id="conversationsList">
+        <div class="conversations-loading">Loading conversations...</div>
+      </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- Main chat -->
+    <main class="chat-container">
+      <div class="chat-wrapper">
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="welcome-message" id="welcomeMessage">
+            <h2>Welcome!</h2>
+            <p>I'm here to help you explore and understand your data. What would you like to know?</p>
+          </div>
+        </div>
+
+        <div class="typing-indicator" id="typingIndicator">
+          <div class="typing-dots">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+
+        <div class="chat-input-container">
+          <div class="chat-input-wrapper">
+            <textarea id="messageInput" class="chat-input" placeholder="Type your message..." rows="1"></textarea>
+            <button class="send-button" id="sendButton" title="Send">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </main>
+    
+    <div class="global-user-avatar" id="globalUser">
+      <div class="bubble">{{ first_letter }}</div>
+    </div>
+    <div class="user-popover" id="userPopover">
+      <button class="menu-item" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <script>
+    $(function(){
+    console.log('App initializing...');
+    
+    // ===== CONVERSATION MANAGEMENT VARIABLES =====
+    let currentConversationId = null;
+    let currentRequest = null;
+    let isAuthenticated = true; // Will be set based on response
+    
+    const $toggle = $('#sidebarToggle');
+    const $overlay = $('#sidebarOverlay');
+    const $chatMessages = $('#chatMessages');
+    const $messageInput = $('#messageInput');
+    const $sendButton = $('#sendButton');
+    const $typing = $('#typingIndicator');
+    const $conversationsList = $('#conversationsList');
+    const $globalUser = $('#globalUser');
+    const $userPopover = $('#userPopover');
+
+    // Start closed
+    closeSidebar();
+
+    // ===== UTILITY FUNCTIONS =====
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+        .replace(/\n/g, "<br>");
+    }
+
+    function handleAuthError() {
+      console.error('Authentication required - redirecting to login');
+      window.location.href = '/';
+    }
+
+    function formatDateTime(dateString) {
+      if (!dateString) return '';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) {
+        return dateString;
+      }
+    }
+
+    // ===== SIDEBAR CONTROLS =====
+    function openSidebar(){ 
+      document.body.classList.add('sidebar-open'); 
+      document.body.classList.remove('sidebar-closed'); 
+    }
+    
+    function closeSidebar(){ 
+      document.body.classList.remove('sidebar-open'); 
+      document.body.classList.add('sidebar-closed'); 
+    }
+    
+    function toggleSidebar(){ 
+      document.body.classList.toggle('sidebar-open'); 
+      document.body.classList.toggle('sidebar-closed'); 
+    }
+
+    $toggle.on('click', function(e){ e.stopPropagation(); toggleSidebar(); });
+    $overlay.on('click', function(){ closeSidebar(); });
+    $(document).on('keydown', function(e){ if (e.key === 'Escape') { closeSidebar(); }});
+
+    // ===== USER AVATAR =====
+    $globalUser.on('click', function(e){
+      e.stopPropagation();
+      $userPopover.toggleClass('open');
+    });
+    
+    $(document).on('click', function(e){
+      if (!$(e.target).closest('#userPopover, #globalUser').length) {
+        $userPopover.removeClass('open');
+      }
+    });
+
+    window.logout = function() {
+      if (confirm('Are you sure you want to sign out?')) {
+        window.location.href = '/logout';
+      }
+    };
+
+    // ===== CONVERSATION MANAGEMENT FUNCTIONS =====
+    
+    function loadConversations() {
+      console.log('Loading conversations...');
+      
+      $conversationsList.html('<div class="conversations-loading">Loading conversations...</div>');
+      
+      $.get('/conversations')
+        .done(function(data) {
+          if (data.success) {
+            updateConversationsList(data.conversations);
+            console.log(`Loaded ${data.conversations.length} conversations`);
+          } else {
+            console.error('Failed to load conversations:', data.error);
+            $conversationsList.html('<div class="conversations-empty">Failed to load conversations</div>');
+          }
+        })
+        .fail(function(xhr) {
+          console.error('Request failed to load conversations:', xhr.status);
+          if (xhr.status === 401) {
+            handleAuthError();
+          } else {
+            $conversationsList.html('<div class="conversations-empty">Error loading conversations</div>');
+          }
+        });
+    }
+
+    function updateConversationsList(conversations) {
+      $conversationsList.empty();
+      
+      if (conversations.length === 0) {
+        $conversationsList.append(`
+          <div class="conversations-empty">
+            No conversations yet.<br>Start chatting to create your first conversation!
+          </div>
+        `);
+        return;
+      }
+      
+      conversations.forEach(conv => {
+        const isActive = conv.id === currentConversationId ? 'active' : '';
+        const createdAt = formatDateTime(conv.created_at);
+        const $item = $(`
+          <div class="conversation-item ${isActive}" data-conversation-id="${conv.id}">
+            <span class="conversation-title" data-original-title="${escapeHtml(conv.title)}">${escapeHtml(conv.title)}</span>
+            <div class="conversation-actions">
+              <button class="rename-conversation-btn" data-id="${conv.id}" title="Rename conversation">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+              </button>
+              <button class="delete-conversation-btn" data-id="${conv.id}" title="Delete conversation">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        `);
+        $conversationsList.append($item);
+      });
+      
+      // Add click handlers
+      $('.conversation-item').off('click').on('click', function(e) {
+        if (!$(e.target).closest('.conversation-actions').length) {
+          const convId = $(this).data('conversation-id');
+          switchConversation(convId);
+        }
+      });
+      
+      $('.rename-conversation-btn').off('click').on('click', function(e) {
+        e.stopPropagation();
+        const convId = $(this).data('id');
+        startRenaming(convId);
+      });
+      
+      $('.delete-conversation-btn').off('click').on('click', function(e) {
+        e.stopPropagation();
+        const convId = $(this).data('id');
+        deleteConversation(convId);
+      });
+    }
+
+    function createNewChat() {
+      console.log('Creating new chat...');
+      
+      hideTyping();
+      
+      $.post('/new_chat')
+        .done(function(data) {
+          if (data.success) {
+            currentConversationId = data.conversation_id;
+            clearChatDisplay();
+            addNewChatMessage();
+            loadConversations();
+            console.log('New chat created:', data.conversation_id);
+          } else {
+            console.error('Failed to create new chat:', data.error);
+            alert('Failed to create new chat: ' + data.error);
+          }
+        })
+        .fail(function(xhr) {
+          console.error('Request failed to create new chat:', xhr.status);
+          if (xhr.status === 401) {
+            handleAuthError();
+          } else {
+            alert('Failed to create new chat. Please try again.');
+          }
+        });
+    }
+
+    function switchConversation(conversationId) {
+      console.log('Switching to conversation:', conversationId);
+      
+      if (currentRequest) {
+        currentRequest.abort();
+        currentRequest = null;
+      }
+      hideTyping();
+      resetSendButton();
+      
+      $.post(`/switch_conversation/${conversationId}`)
+        .done(function(data) {
+          if (data.success) {
+            currentConversationId = data.conversation_id;
+            clearChatDisplay();
+            
+            if (data.messages && data.messages.length > 0) {
+              data.messages.forEach(msg => {
+                addMessage(msg.text, msg.sender, false, msg.timestamp);
+              });
+            } else {
+              $('#welcomeMessage').show();
+            }
+            
+            $('.conversation-item').removeClass('active');
+            $(`.conversation-item[data-conversation-id="${conversationId}"]`).addClass('active');
+            
+            closeSidebar();
+            console.log('Switched to conversation:', conversationId);
+          } else {
+            console.error('Failed to switch conversation:', data.error);
+            alert('Failed to load conversation: ' + data.error);
+          }
+        })
+        .fail(function(xhr) {
+          console.error('Request failed to switch conversation:', xhr.status);
+          if (xhr.status === 401) {
+            handleAuthError();
+          } else {
+            alert('Failed to load conversation. Please try again.');
+          }
+        });
+    }
+
+    function deleteConversation(conversationId) {
+      if (confirm('Are you sure you want to delete this conversation? This cannot be undone.')) {
+        console.log('Deleting conversation:', conversationId);
+        
+        $.ajax({
+          url: `/delete_conversation/${conversationId}`,
+          method: 'DELETE'
+        })
+        .done(function(data) {
+          if (data.success) {
+            if (currentConversationId === conversationId) {
+              currentConversationId = null;
+              clearChatDisplay();
+              $('#welcomeMessage').show();
+            }
+            loadConversations();
+            console.log('Conversation deleted:', conversationId);
+          } else {
+            console.error('Failed to delete conversation:', data.error);
+            alert('Failed to delete conversation: ' + data.error);
+          }
+        })
+        .fail(function(xhr) {
+          console.error('Request failed to delete conversation:', xhr.status);
+          if (xhr.status === 401) {
+            handleAuthError();
+          } else {
+            alert('Failed to delete conversation. Please try again.');
+          }
+        });
+      }
+    }
+
+    function startRenaming(conversationId) {
+      console.log('Starting rename for conversation:', conversationId);
+      
+      const $item = $(`.conversation-item[data-conversation-id="${conversationId}"]`);
+      const $title = $item.find('.conversation-title');
+      const currentTitle = $title.data('original-title') || $title.text();
+      
+      $title.html(`
+        <input type="text" class="rename-input" value="${escapeHtml(currentTitle)}" maxlength="100">
+      `);
+      
+      const $input = $title.find('.rename-input');
+      $input.focus().select();
+      
+      $input.off('keypress blur').on('keypress blur', function(e) {
+        if (e.type === 'blur' || e.which === 13) {
+          const newTitle = $(this).val().trim();
+          finishRenaming(conversationId, newTitle, currentTitle);
+        }
+        if (e.which === 27) {
+          cancelRenaming(conversationId, currentTitle);
+        }
+      });
+    }
+
+    function finishRenaming(conversationId, newTitle, originalTitle) {
+      if (!newTitle || newTitle === originalTitle) {
+        cancelRenaming(conversationId, originalTitle);
+        return;
+      }
+      
+      if (newTitle.length > 100) {
+        alert('Title must be 100 characters or less');
+        cancelRenaming(conversationId, originalTitle);
+        return;
+      }
+      
+      console.log('Saving new title:', newTitle);
+      
+      $.ajax({
+        url: `/rename_conversation/${conversationId}`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({ title: newTitle })
+      })
+      .done(function(data) {
+        if (data.success) {
+          const $item = $(`.conversation-item[data-conversation-id="${conversationId}"]`);
+          const $title = $item.find('.conversation-title');
+          $title.text(newTitle).data('original-title', newTitle);
+          console.log('Conversation renamed successfully');
+        } else {
+          alert('Failed to rename: ' + data.error);
+          cancelRenaming(conversationId, originalTitle);
+        }
+      })
+      .fail(function(xhr) {
+        console.error('Request failed to rename conversation:', xhr.status);
+        if (xhr.status === 401) {
+          handleAuthError();
+        } else {
+          alert('Failed to rename conversation. Please try again.');
+          cancelRenaming(conversationId, originalTitle);
+        }
+      });
+    }
+
+    function cancelRenaming(conversationId, originalTitle) {
+      const $item = $(`.conversation-item[data-conversation-id="${conversationId}"]`);
+      const $title = $item.find('.conversation-title');
+      $title.text(originalTitle);
+    }
+
+    function clearChatDisplay() {
+      $chatMessages.empty();
+      hideTyping();
+    }
+
+    function addNewChatMessage() {
+      $('#welcomeMessage').hide();
+      
+      const $newChatMessage = $(`
+        <div class="new-chat-message" id="newChatMessage">
+          <h2>✨New Chat Started</h2>
+          <p>Ready to explore your data! What would you like to know?</p>
+        </div>
+      `);
+      
+      $chatMessages.append($newChatMessage);
+    }
+
+    // Save current conversation ID when it changes
+    function setCurrentConversation(conversationId) {
+      currentConversationId = conversationId;
+      if (conversationId) {
+        localStorage.setItem('currentConversationId', conversationId);
+      } else {
+        localStorage.removeItem('currentConversationId');
+      }
+    }
+
+    // Restore conversation on page load
+    function restoreActiveConversation() {
+      const savedConversationId = localStorage.getItem('currentConversationId');
+      if (savedConversationId) {
+        console.log('Restoring conversation:', savedConversationId);
+        switchConversation(savedConversationId);
+      }
+    }
+
+    // ===== CHAT TIMESTAMP ====
+    function formatDateTime(dateString) {
+      if (!dateString) return '';
+      try {
+        const date = new Date(dateString);
+        // Force to local timezone display
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          hour12: true
+        });
+      } catch (e) {
+        return dateString;
+      }
+    }
+
+    // ===== CHAT FUNCTIONS =====
+    
+    function scrollToBottom(){ 
+      $chatMessages.scrollTop($chatMessages[0].scrollHeight); 
+    }
+
+    function classifyAssistant(mdText){
+      return 'normal';
+    }
+
+    function addMessage(text, sender, save = true, timestamp = null) {
+      const $welcome = $('#welcomeMessage');
+      const $newChat = $('#newChatMessage');
+      if ($welcome.is(':visible')) $welcome.hide();
+      if ($newChat.length && $newChat.is(':visible')) $newChat.hide();
+
+      const messageTime = timestamp ? new Date(timestamp) : new Date();
+      const time = messageTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      let cls = sender === 'assistant' ? classifyAssistant(text) : '';
+      let processed = text;
+
+      if (sender === 'assistant') {
+        processed = marked.parse(text);
+      } else {
+        processed = escapeHtml(text);
+      }
+
+      const html = `
+        <div class="message ${sender} ${sender === 'assistant' ? cls : ''}">
+          <div class="message-content">
+            <div>${processed}</div>
+            <div class="message-time">${time}</div>
+          </div>
+        </div>`;
+      $chatMessages.append(html);
+      scrollToBottom();
+    }
+
+    function showTyping(){ 
+      $typing.addClass('show'); 
+      scrollToBottom(); 
+    }
+    
+    function hideTyping(){ 
+      $typing.removeClass('show'); 
+    }
+
+    // Auto-resize textarea
+    $messageInput.on('input', function(){
+      this.style.height='auto';
+      this.style.height=this.scrollHeight+'px';
+    });
+
+    function sendMessage(){
+      const message = $messageInput.val().trim();
+      if (!message) return;
+
+      $messageInput.prop('disabled', true);
+      $sendButton.prop('disabled', true).css('opacity','0.5');
+
+      addMessage(message, 'user');
+      $messageInput.val('').css('height','auto');
+      showTyping();
+
+      if (!currentConversationId) {
+        console.log('No current conversation, creating new one...');
+        $.post('/new_chat')
+          .done(function(data) {
+            if (data.success) {
+              currentConversationId = data.conversation_id;
+              console.log('Created conversation for message:', currentConversationId);
+              sendMessageWithConversation(message);
+            } else {
+              hideTyping();
+              addMessage('Failed to create conversation: ' + data.error, 'assistant');
+              resetSendButton();
+            }
+          })
+          .fail(function(xhr) {
+            hideTyping();
+            if (xhr.status === 401) {
+              handleAuthError();
+            } else {
+              addMessage('Failed to create conversation. Please try again.', 'assistant');
+              resetSendButton();
+            }
+          });
+      } else {
+        sendMessageWithConversation(message);
+      }
+    }
+
+    function sendMessageWithConversation(message) {
+      currentRequest = $.ajax({
+        url: "/get",
+        method: "GET",
+        data: { 
+          msg: message,
+          conversation_id: currentConversationId
+        },
+        timeout: 330000,
+        success: function(data){
+          currentRequest = null;
+          hideTyping();
+          addMessage(data, 'assistant');
+          loadConversations();
+        },
+        error: function(xhr, status, error){
+          currentRequest = null;
+          
+          if (xhr.statusText === 'abort') {
+            console.log('Request was cancelled');
+            return;
+          }
+          
+          if (xhr.status === 401) {
+            handleAuthError();
+            return;
+          }
+          
+          hideTyping();
+          let errorMessage;
+
+          if (status === 'timeout') {
+            errorMessage = 'Request timed out. Please try again in a moment';
+          } else if (xhr.status === 0) {
+            errorMessage = 'Connection failed. Please check your internet connection and try again.';
+          } else if (xhr.status === 429) {
+            errorMessage = 'Too many requests. Please wait a moment before trying again.';
+          } else if (xhr.status === 500) {
+            errorMessage = 'Server error. I\'m experiencing temporary issues. Please try again in a moment.';
+          } else if (xhr.status === 502 || xhr.status === 503) {
+            errorMessage = 'Service temporarily unavailable. The server might be restarting. Please try again in a minute.';
+          } else if (xhr.status === 408) {
+            errorMessage = 'Request timeout. Try asking for a simpler query or breaking it into smaller parts.';
+          } else if (xhr.status >= 400 && xhr.status < 500) {
+            let backendError = 'Unknown client error';
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              backendError = errorData.error || errorData.message || backendError;
+            } catch (e) {
+              backendError = xhr.responseText || xhr.statusText || backendError;
+            }
+            const safe = escapeHtml(backendError);
+            const compactError = `
+              <div class="error-panel">
+                <div class="error-title">Request error</div>
+                <div class="error-text">${safe}</div>
+              </div>`;
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const html = `
+              <div class="message assistant normal">
+                <div class="message-content">
+                  ${compactError}
+                  <div class="message-time">${time}</div>
+                </div>
+              </div>`;
+            $chatMessages.append(html);
+            scrollToBottom();
+            return;
+          } else {
+            errorMessage = `Error occurred: ${error || 'Unknown error'}. Status: ${status}. Please try again.`;
+          }
+          
+          addMessage(errorMessage, 'assistant');
+        },
+        complete: function(){
+          resetSendButton();
+        }
+      });
+    }
+
+    function resetSendButton() {
+      $messageInput.prop('disabled', false);
+      $sendButton.prop('disabled', false).css('opacity','1');
+      $messageInput.focus();
+    }
+
+    $sendButton.on('click', sendMessage);
+    $messageInput.on('keypress', function(e){
+      if (e.which === 13 && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    
+    $('#newChatBtn').on('click', function() {
+      createNewChat();
+      closeSidebar();
+    });
+
+    // ===== CLEAR SESSION FUNCTIONALITY =====
+    window.clearSession = function() {
+      if (confirm('Are you sure you want to clear your conversation session? This will reset your current chat but won\'t delete saved conversations.')) {
+        fetch('/clear_session')
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              clearChatDisplay();
+              $('#welcomeMessage').show();
+              currentConversationId = null;
+              $('.conversation-item').removeClass('active');
+              console.log('Session cleared successfully');
+            } else {
+              console.log('Clear session result:', data.message);
+              alert(data.message || 'Session cleared');
+            }
+          })
+          .catch(error => {
+            console.error('Error clearing session:', error);
+            alert('Error clearing session. Please try again.');
+          });
+      }
+    };
+
+    // ===== SESSION INFO MODAL =====
+    window.showSessionInfo = function() {
+      $('#sessionInfoModal').show();
+      $('#sessionInfoData').text('Loading...');
+      
+      fetch('/conversation_stats')
+        .then(response => response.json())
+        .then(data => {
+          let html = '<div style="font-family:monospace;font-size:13px;line-height:1.4;">';
+          html += JSON.stringify(data, null, 2);
+          html += '</div>';
+          $('#sessionInfoData').html('<pre style="white-space:pre-wrap;max-height:300px;overflow-y:auto;">' + html + '</pre>');
+        })
+        .catch(error => {
+          $('#sessionInfoData').text('Error loading session info: ' + error.message);
+        });
+    };
+
+    // ===== KEYBOARD SHORTCUTS =====
+    $(document).on('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeSidebar();
+        $('#sessionInfoModal').hide();
+        $userPopover.removeClass('open');
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        createNewChat();
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        $messageInput.focus();
+      }
+    });
+
+    // ===== INITIALIZATION =====
+    
+    console.log('Initializing app...');
+    
+    // Load conversations when page loads
+    loadConversations();
+    
+    // Focus on message input when page loads
+    setTimeout(function() {
+      $messageInput.focus();
+    }, 100);
+    
+    // Handle browser back/forward buttons
+    $(window).on('popstate', function() {
+      loadConversations();
+    });
+    
+    // Handle page visibility changes
+    document.addEventListener('visibilitychange', function() {
+      if (!document.hidden) {
+        loadConversations();
+      }
+    });
+    
+    // Auto-save functionality
+    let draftTimeout;
+    $messageInput.on('input', function() {
+      clearTimeout(draftTimeout);
+      draftTimeout = setTimeout(function() {
+        const draft = $messageInput.val().trim();
+        if (draft) {
+          localStorage.setItem('messageDraft', draft);
+        } else {
+          localStorage.removeItem('messageDraft');
+        }
+      }, 1000);
+    });
+    
+    // Restore draft message on page load
+    const savedDraft = localStorage.getItem('messageDraft');
+    if (savedDraft) {
+      $messageInput.val(savedDraft);
+      $messageInput[0].style.height = 'auto';
+      $messageInput[0].style.height = $messageInput[0].scrollHeight + 'px';
+    }
+    
+    // Clear draft when message is sent
+    const originalSendMessage = sendMessage;
+    sendMessage = function() {
+      localStorage.removeItem('messageDraft');
+      originalSendMessage();
+    };
+    
+  });
+  </script>
+
+  </body>
+</html>

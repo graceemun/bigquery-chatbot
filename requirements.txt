@@ -1,0 +1,40 @@
+# Core app
+Flask>=3.0.3
+flask-cors>=4.0.1
+python-dotenv>=1.0.1
+
+# Anthropic SDK
+anthropic>=0.36.0
+
+# MCP
+fastmcp>=0.4.0
+
+# Data + Google auth
+google-auth>=2.23.4
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+
+# Redis
+redis>=5.0.7
+
+# Pydantic (v2)
+pydantic>=2.8.2
+
+# If you use Requests directly
+requests>=2.32.3
+
+# User Database
+psycopg2-binary>=2.9.7
+
+# For Production Server
+gunicorn
+
+# Memory monitoring (for the memory stats we added)
+psutil>=5.9.0
+
+# Optional: For enhanced logging and monitoring
+structlog==23.2.0
+
+# Optional: For better error handling
+sentry-sdk[flask]==1.38.0
+
