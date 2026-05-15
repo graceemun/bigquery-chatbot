@@ -1,6 +1,6 @@
 # NuView BigQuery Web Application
 
-**Live Application**: [https://nuview-bigquery.up.railway.app/](https://nuview-bigquery.up.railway.app/)
+**Live Application**: [https://bigquery-chatbot-production.up.railway.app/home)
 
 A secure, web-based interface for NuView Analytics BigQuery data exploration powered by Claude AI and the NuView MCP BigQuery server. This application provides an intuitive chat interface for data analysis with Google OAuth authentication and persistent conversation management.
 
