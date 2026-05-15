@@ -753,6 +753,90 @@ def rename_conversation(conversation_id):
         }), 500
 
 
+@app.route('/setup_organization', methods=['POST'])
+@login_is_required
+def setup_organization():
+    """Register the user's GCP project and service account in the MCP database."""
+    import hashlib, base64, psycopg2
+    from cryptography.fernet import Fernet
+
+    user = get_current_user()
+    if not user:
+        return jsonify({'success': False, 'error': 'Authentication required'}), 401
+
+    data = request.get_json()
+    project_id      = (data.get('project_id') or '').strip()
+    sa_json_str     = (data.get('service_account_json') or '').strip()
+    org_name        = (data.get('org_name') or '').strip() or 'My Organization'
+
+    if not project_id or not sa_json_str:
+        return jsonify({'success': False, 'error': 'Project ID and service account JSON are required'}), 400
+
+    # Validate the service account JSON
+    try:
+        sa_dict = json.loads(sa_json_str)
+        sa_email = sa_dict.get('client_email', '')
+        if not sa_email:
+            return jsonify({'success': False, 'error': 'Invalid service account JSON — missing client_email'}), 400
+    except json.JSONDecodeError:
+        return jsonify({'success': False, 'error': 'Invalid JSON — please paste the full service account file'}), 400
+
+    mcp_db_url        = os.environ.get('MCP_DATABASE_URL')
+    encryption_secret = os.environ.get('ENCRYPTION_SECRET')
+    if not mcp_db_url or not encryption_secret:
+        return jsonify({'success': False, 'error': 'Server misconfiguration: MCP_DATABASE_URL or ENCRYPTION_SECRET not set'}), 500
+
+    user_email = user['email']
+    domain     = user_email.split('@')[1]
+
+    try:
+        conn = psycopg2.connect(mcp_db_url)
+        conn.autocommit = False
+        cur = conn.cursor()
+
+        # Create or fetch org by domain
+        cur.execute("SELECT id FROM organizations WHERE domain = %s", (domain,))
+        row = cur.fetchone()
+        if row:
+            org_id = str(row[0])
+        else:
+            cur.execute(
+                "INSERT INTO organizations (name, domain) VALUES (%s, %s) RETURNING id",
+                (org_name, domain)
+            )
+            org_id = str(cur.fetchone()[0])
+
+        # Encrypt service account using same algorithm as crypto_utils.py
+        combined  = f"{org_id}:{encryption_secret}".encode()
+        key       = base64.urlsafe_b64encode(hashlib.sha256(combined).digest())
+        encrypted = base64.b64encode(Fernet(key).encrypt(sa_json_str.encode())).decode()
+
+        # Save encrypted SA to org
+        cur.execute(
+            "UPDATE organizations SET encrypted_service_account = %s, service_account_email = %s WHERE id = %s",
+            (encrypted, sa_email, org_id)
+        )
+
+        # Add GCP project
+        cur.execute("""
+            INSERT INTO organization_projects (organization_id, project_id, display_name, added_by)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (organization_id, project_id) DO UPDATE
+              SET display_name = EXCLUDED.display_name, added_by = EXCLUDED.added_by
+        """, (org_id, project_id, project_id, user_email))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        logger.info(f"Organization setup complete for {user_email}: org={org_id}, project={project_id}")
+        return jsonify({'success': True, 'message': 'Organization configured successfully. You can now query your BigQuery data.'})
+
+    except Exception as e:
+        logger.error(f"setup_organization failed: {e}")
+        return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
+
+
 if __name__ == '__main__':
     PORT = int(os.environ.get("PORT", 5000))
     
