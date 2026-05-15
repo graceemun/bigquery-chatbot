@@ -731,18 +731,27 @@ def remove_debug_text(response_text):
 def generate_request_id():
     return str(uuid.uuid4())[:8]
 
-def get_response(user_input, user_id, request_id=None):
+def build_mcp_token(user_id: str, user_email: str) -> str:
+    """Build the MCP_API_KEY:base64(context) token the MCP server expects."""
+    import base64, json
+    api_key = os.environ["MCP_API_KEY"]
+    context = base64.b64encode(
+        json.dumps({"user_id": user_id, "email": user_email}).encode()
+    ).decode()
+    return f"{api_key}:{context}"
+
+
+def get_response(user_input, user_id, user_email=None, request_id=None):
     """Get response with proactive context management"""
-    
+
     if not request_id:
         request_id = generate_request_id()
-        
+
     start_time = time.time()
-    
+
     def _execute_request():
-        
-        audience = os.environ["MCP_AUDIENCE"]
-        token = get_cached_token(audience)
+
+        token = build_mcp_token(user_id, user_email or f"{user_id}@unknown")
 
         user_conv = get_user_conversation(user_id)
         session_id = user_conv['metadata'].get('session_id', 'new')
@@ -800,23 +809,23 @@ def get_response(user_input, user_id, request_id=None):
         return f"Request timed out after {duration:.1f} seconds. Please try a simpler query."
         
 
-def get_response_with_retry(user_input, user_id, max_retries=2):
+def get_response_with_retry(user_input, user_id, user_email=None, max_retries=2):
     """Get response with retry logic"""
-    
+
     request_id = generate_request_id()
     total_start_time = time.time()
-    
+
     user_conv = get_user_conversation(user_id)
     session_id = user_conv['metadata'].get('session_id', 'new')
-    
+
     logger.info(f"🚀 [{request_id}] Processing request for user {user_id}, session: {session_id}")
-    
+
     for attempt in range(max_retries):
         try:
             attempt_start = time.time()
             logger.info(f"📡 [{request_id}] Attempt {attempt + 1}/{max_retries}")
-            
-            result = get_response(user_input, user_id, request_id)
+
+            result = get_response(user_input, user_id, user_email=user_email, request_id=request_id)
             
             attempt_duration = time.time() - attempt_start
             total_duration = time.time() - total_start_time

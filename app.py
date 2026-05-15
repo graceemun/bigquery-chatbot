@@ -307,7 +307,7 @@ def get_bot_response():
         logger.info(f"ðŸš€ Starting Claude API call at {time.time()}")
         
         # Your existing Claude API call
-        response = claude.get_response_with_retry(userText, user_id, max_retries=1)
+        response = claude.get_response_with_retry(userText, user_id, user_email=user['email'], max_retries=1)
         
         logger.info(f"✅ Claude API call completed at {time.time()}")
         
