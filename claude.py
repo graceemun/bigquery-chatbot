@@ -44,8 +44,11 @@ _locks_lock = threading.RLock()
 _cached = {"token": None, "expiry": None}
 
 
-system_prompt = """You are an expert BigQuery data analyst. 
-Provide comprehensive analysis by intelligently breaking complex questions into steps when needed.   
+def get_system_prompt():
+    today = datetime.now().strftime("%B %d, %Y")
+    return f"""You are an expert BigQuery data analyst.
+Today's date is {today}. Always use this when interpreting relative terms like "this year", "this month", "this quarter", or "recent".
+Provide comprehensive analysis by intelligently breaking complex questions into steps when needed.
 
 When users want to manage BigQuery projects, use natural language understanding:
 
@@ -768,7 +771,7 @@ def get_response(user_input, user_id, user_email=None, request_id=None):
             system = [
                 {
                     "type": "text",
-                    "text": system_prompt,
+                    "text": get_system_prompt(),
                     "cache_control": {
                         "type": "ephemeral"
                     }
