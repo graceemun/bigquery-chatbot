@@ -692,7 +692,33 @@
       <div class="bubble">{{ first_letter }}</div>
     </div>
     <div class="user-popover" id="userPopover">
+      <button class="menu-item" onclick="openSetupModal()">Settings</button>
       <button class="menu-item" onclick="logout()">Logout</button>
+    </div>
+
+    <!-- Setup Organization Modal -->
+    <div id="setupModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:2000; align-items:center; justify-content:center;">
+      <div style="background:#fff; border-radius:14px; padding:32px; width:90%; max-width:520px; box-shadow:0 24px 60px rgba(0,0,0,.2);">
+        <h2 style="font-size:18px; font-weight:700; margin-bottom:6px;">Connect BigQuery</h2>
+        <p style="font-size:14px; color:#6b7280; margin-bottom:24px;">Paste your GCP project ID and service account JSON to connect your BigQuery data.</p>
+
+        <div id="setupError" style="display:none; background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:16px;"></div>
+        <div id="setupSuccess" style="display:none; background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; border-radius:8px; padding:10px 12px; font-size:13px; margin-bottom:16px;"></div>
+
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Organization Name</label>
+        <input id="setupOrgName" type="text" placeholder="e.g. My Company" style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px; margin-bottom:16px; outline:none; font-family:inherit;">
+
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">GCP Project ID</label>
+        <input id="setupProjectId" type="text" placeholder="e.g. my-project-123456" style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px; margin-bottom:16px; outline:none; font-family:inherit;">
+
+        <label style="display:block; font-size:13px; font-weight:600; margin-bottom:6px;">Service Account JSON</label>
+        <textarea id="setupSaJson" rows="7" placeholder='Paste the full contents of your service account .json key file here...' style="width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:13px; font-family:'Fira Code', monospace; resize:vertical; outline:none; margin-bottom:20px;"></textarea>
+
+        <div style="display:flex; gap:10px; justify-content:flex-end;">
+          <button onclick="closeSetupModal()" style="padding:10px 20px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; font-size:14px; cursor:pointer; font-family:inherit;">Cancel</button>
+          <button onclick="submitSetup()" id="setupSubmitBtn" style="padding:10px 20px; border:none; border-radius:8px; background:#1a73e8; color:#fff; font-size:14px; font-weight:600; cursor:pointer; font-family:inherit;">Connect</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -781,6 +807,63 @@
         window.location.href = '/logout';
       }
     };
+
+    window.openSetupModal = function() {
+      $userPopover.removeClass('open');
+      $('#setupError').hide();
+      $('#setupSuccess').hide();
+      $('#setupModal').css('display', 'flex');
+    };
+
+    window.closeSetupModal = function() {
+      $('#setupModal').hide();
+    };
+
+    window.submitSetup = function() {
+      const orgName   = $('#setupOrgName').val().trim();
+      const projectId = $('#setupProjectId').val().trim();
+      const saJson    = $('#setupSaJson').val().trim();
+
+      $('#setupError').hide();
+      $('#setupSuccess').hide();
+
+      if (!projectId || !saJson) {
+        $('#setupError').text('Project ID and service account JSON are required.').show();
+        return;
+      }
+
+      const $btn = $('#setupSubmitBtn');
+      $btn.text('Connecting...').prop('disabled', true);
+
+      $.ajax({
+        url: '/setup_organization',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ org_name: orgName, project_id: projectId, service_account_json: saJson }),
+        success: function(data) {
+          if (data.success) {
+            $('#setupSuccess').text(data.message).show();
+            $('#setupProjectId').val('');
+            $('#setupSaJson').val('');
+            setTimeout(closeSetupModal, 2000);
+          } else {
+            $('#setupError').text(data.error).show();
+          }
+        },
+        error: function(xhr) {
+          const msg = xhr.responseJSON ? xhr.responseJSON.error : 'Connection failed. Please try again.';
+          $('#setupError').text(msg).show();
+        },
+        complete: function() {
+          $btn.text('Connect').prop('disabled', false);
+        }
+      });
+    };
+
+    // Close modal on backdrop click
+    $('#setupModal').on('click', function(e) {
+      if ($(e.target).is('#setupModal')) closeSetupModal();
+    });
 
     // ===== CONVERSATION MANAGEMENT FUNCTIONS =====
     

@@ -26,6 +26,9 @@ requests>=2.32.3
 # User Database
 psycopg2-binary>=2.9.7
 
+# Encryption (for MCP org setup)
+cryptography>=3.4.0
+
 # For Production Server
 gunicorn
 
